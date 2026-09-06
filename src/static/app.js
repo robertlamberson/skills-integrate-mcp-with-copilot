@@ -3,6 +3,32 @@ document.addEventListener("DOMContentLoaded", () => {
   const activitySelect = document.getElementById("activity");
   const signupForm = document.getElementById("signup-form");
   const messageDiv = document.getElementById("message");
+  const loginButton = document.getElementById("login-button");
+  const logoutButton = document.getElementById("logout-button");
+  const authStatus = document.getElementById("auth-status");
+  const loginDialog = document.getElementById("login-dialog");
+  const loginForm = document.getElementById("login-form");
+  const loginMessage = document.getElementById("login-message");
+  let isTeacher = false;
+
+  function updateAuthUI(authenticated, username) {
+    isTeacher = authenticated;
+    authStatus.textContent = authenticated
+      ? `Signed in as ${username}`
+      : "Students can browse activities";
+    loginButton.classList.toggle("hidden", authenticated);
+    logoutButton.classList.toggle("hidden", !authenticated);
+    signupForm.classList.toggle("hidden", !authenticated);
+    document.querySelectorAll(".delete-btn").forEach((button) => {
+      button.classList.toggle("hidden", !authenticated);
+    });
+  }
+
+  async function fetchAuthStatus() {
+    const response = await fetch("/auth/status");
+    const status = await response.json();
+    updateAuthUI(status.authenticated, status.username);
+  }
 
   // Function to fetch activities from API
   async function fetchActivities() {
@@ -30,7 +56,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 ${details.participants
                   .map(
                     (email) =>
-                      `<li><span class="participant-email">${email}</span><button class="delete-btn" data-activity="${name}" data-email="${email}">❌</button></li>`
+                      `<li><span class="participant-email">${email}</span><button class="delete-btn ${isTeacher ? "" : "hidden"}" data-activity="${name}" data-email="${email}">Remove</button></li>`
                   )
                   .join("")}
               </ul>
@@ -155,6 +181,43 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  loginButton.addEventListener("click", () => {
+    loginMessage.className = "hidden";
+    loginForm.reset();
+    loginDialog.showModal();
+  });
+
+  document.getElementById("cancel-login").addEventListener("click", () => {
+    loginDialog.close();
+  });
+
+  logoutButton.addEventListener("click", async () => {
+    await fetch("/auth/logout", { method: "POST" });
+    updateAuthUI(false, null);
+    fetchActivities();
+  });
+
+  loginForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const response = await fetch("/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: document.getElementById("username").value,
+        password: document.getElementById("password").value,
+      }),
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      loginMessage.textContent = result.detail || "Login failed";
+      loginMessage.className = "error";
+      return;
+    }
+    loginDialog.close();
+    updateAuthUI(true, result.username);
+    fetchActivities();
+  });
+
   // Initialize app
-  fetchActivities();
+  fetchAuthStatus().then(fetchActivities);
 });
